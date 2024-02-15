@@ -1,0 +1,6 @@
+@PowerplantCodingChallenge.Api_HostAddress = http://localhost:5245
+
+GET {{PowerplantCodingChallenge.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
