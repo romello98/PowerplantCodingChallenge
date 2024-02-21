@@ -6,14 +6,31 @@ namespace PowerplantCodingChallenge.Api.Controllers
 {
     [ApiController]
     [Route("productionplan")]
-    public class ProductionPlanController(ProductionPlanService productionPlanService) : ControllerBase
+    public class ProductionPlanController : ControllerBase
     {
-        private readonly ProductionPlanService productionPlanService = productionPlanService;
+        private readonly ProductionPlanService _productionPlanService;
+        private readonly ILogger<ProductionPlanController> _logger;
+
+        public ProductionPlanController(
+            ProductionPlanService productionPlanService,
+            ILogger<ProductionPlanController> logger)
+        {
+            _productionPlanService = productionPlanService;
+            _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        }
 
         [HttpPost]
         public async Task<ActionResult<IEnumerable<ProductionPlanItem>>> GetProductionPlan(PowerPlanRequirement payload)
         {
-            return Ok(await Task.FromResult(productionPlanService.GetProductionPlan(payload)));
+            try
+            {
+                return Ok(await Task.FromResult(_productionPlanService.GetProductionPlan(payload)));
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "An error occurred while getting production plan");
+                return StatusCode(StatusCodes.Status500InternalServerError, ex.Message);
+            }
         }
     }
 }

@@ -1,4 +1,5 @@
 using PowerplantCodingChallenge.Api.Services;
+using Serilog;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,16 +11,18 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 builder.Services.AddScoped<ProductionPlanService>();
 
+Log.Logger = new LoggerConfiguration()
+    .WriteTo.Console()
+    .Enrich.FromLogContext()
+    .ReadFrom.Configuration(builder.Configuration)
+    .CreateLogger();
+
+builder.Host.UseSerilog();
+
 var app = builder.Build();
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
-
-app.UseHttpsRedirection();
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseAuthorization();
 

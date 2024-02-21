@@ -6,7 +6,6 @@ namespace PowerplantCodingChallenge.Api.Services
     {
         public IEnumerable<ProductionPlanItem> GetProductionPlan(PowerPlanRequirement requirement)
         {
-            // Sort powerplants based on their type and efficiency
             requirement.Powerplants.Sort((x, y) => 
                 PowerplantBusinessCostMetric(y, requirement) <= PowerplantBusinessCostMetric(x, requirement) ? 0 : -1);
 
@@ -26,8 +25,8 @@ namespace PowerplantCodingChallenge.Api.Services
 
             return powerplant.Type switch
             {
-                "windturbine" => 0,
-                "gasfired" => gasCostPerMWh / powerplant.Efficiency,
+                PowerPlantType.Windturbine => -powerplant.Efficiency,
+                PowerPlantType.Gasfired => gasCostPerMWh / powerplant.Efficiency,
                 _ => kerosineCostPerMWh / powerplant.Efficiency
             };
         }
@@ -36,13 +35,11 @@ namespace PowerplantCodingChallenge.Api.Services
         {
             decimal powerToProduce;
 
-            // If remaining load is less than or equal to 0, break the loop
             if (remainingLoad <= 0 || powerplant.UsedLoad == powerplant.Pmax)
             {
                 return new ProductionPlanItem { Name = powerplant.Name, Power = 0 };
             }
 
-            // Update remaining load and add to production plan
             powerToProduce = UseOrderedPower(remainingLoad, powerplant, requirement);
             remainingLoad -= powerToProduce;
             return new ProductionPlanItem { Name = powerplant.Name, Power = powerToProduce };
@@ -51,9 +48,9 @@ namespace PowerplantCodingChallenge.Api.Services
         private static decimal UseOrderedPower(decimal remainingLoad, Powerplant powerplant, PowerPlanRequirement requirement)
         {
             decimal proportion = 1;
-            if(powerplant.Type is "windturbine")
+            if(powerplant.Type is PowerPlantType.Windturbine)
             {
-                proportion *= powerplant.Efficiency * requirement.Fuels.WindPercentage / 100m;
+                proportion = powerplant.Efficiency * requirement.Fuels.WindPercentage / 100m;
             }
 
             var powerToProduce = Math.Min(remainingLoad, powerplant.Pmax * proportion);
@@ -64,27 +61,20 @@ namespace PowerplantCodingChallenge.Api.Services
             Powerplant powerplant, PowerPlanRequirement requirement)
         {
             var potentialCandidates = requirement.Powerplants.SkipWhile(p => p != powerplant || p.UsedLoad == p.Pmax);
-            Powerplant bestCandidate = powerplant;
-            decimal actualCost = decimal.MaxValue;
-            decimal actualLoad = powerToProduce;
-            decimal actualPowerToProduce = powerToProduce;
+            var bestCandidate = powerplant;
+            var actualCost = decimal.MaxValue;
+            var actualLoad = powerToProduce;
+            var actualPowerToProduce = powerToProduce;
 
             foreach (var pc in potentialCandidates)
             {
-                var gasCostPerMWh = requirement.Fuels.GasPricePerMWh;
-                var kerosineCostPerMWh = requirement.Fuels.KerosinePricePerMWh;
                 var load = Math.Max(Math.Max(pc.Pmin, powerToProduce), pc.UsedLoad);
-                decimal cost;
-
-                switch (pc.Type)
+                var cost = pc.Type switch
                 {
-                    case "gasfired":
-                        cost = load * (gasCostPerMWh / pc.Efficiency + 0.3m * requirement.Fuels.Co2PricePerTon);
-                        break;
-                    default:
-                        cost = load * kerosineCostPerMWh / pc.Efficiency;
-                        break;
-                }
+                    PowerPlantType.Windturbine => 0,
+                    PowerPlantType.Gasfired => load * (requirement.Fuels.GasPricePerMWh / pc.Efficiency + Constants.CarbonTonsPerMWh * requirement.Fuels.Co2PricePerTon),
+                    _ => load * requirement.Fuels.KerosinePricePerMWh / pc.Efficiency,
+                };
 
                 if (cost < actualCost)
                 {
@@ -94,7 +84,7 @@ namespace PowerplantCodingChallenge.Api.Services
                 }
             }
 
-            if (potentialCandidates.First() != bestCandidate)
+            if (potentialCandidates.FirstOrDefault() != bestCandidate)
             {
                 return 0;
             }
