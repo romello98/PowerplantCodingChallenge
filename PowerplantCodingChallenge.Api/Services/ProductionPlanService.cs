@@ -7,10 +7,10 @@ namespace PowerplantCodingChallenge.Api.Services
         public IEnumerable<ProductionPlanItem> GetProductionPlan(PowerPlanRequirement requirement)
         {
             requirement.Powerplants.Sort((x, y) => 
-                PowerplantBusinessCostMetric(y, requirement) <= PowerplantBusinessCostMetric(x, requirement) ? 0 : -1);
+                PowerplantBusinessCostMetric(y, requirement) <= PowerplantBusinessCostMetric(x, requirement) ? 1 : -1);
 
             decimal remainingLoad = requirement.Load;
-            return requirement.Powerplants.Select(powerplant => CreateOrderedProductionPlanItem(ref remainingLoad, ref powerplant, requirement));
+            return requirement.Powerplants.Select(powerplant => CreateOrderedProductionPlanItem(ref remainingLoad, ref powerplant, requirement)).ToList();
         }
 
         private static decimal PowerplantBusinessCostMetric(Powerplant powerplant, PowerPlanRequirement requirement)
@@ -35,7 +35,7 @@ namespace PowerplantCodingChallenge.Api.Services
         {
             decimal powerToProduce;
 
-            if (remainingLoad <= 0 || powerplant.UsedLoad == powerplant.Pmax)
+            if (remainingLoad <= 0)
             {
                 return new ProductionPlanItem { Name = powerplant.Name, Power = 0 };
             }
@@ -60,7 +60,7 @@ namespace PowerplantCodingChallenge.Api.Services
         private static decimal GetOrderedOptimizedPowerFromPowerplant(decimal powerToProduce, 
             Powerplant powerplant, PowerPlanRequirement requirement)
         {
-            var potentialCandidates = requirement.Powerplants.SkipWhile(p => p != powerplant || p.UsedLoad == p.Pmax);
+            var potentialCandidates = requirement.Powerplants.SkipWhile(p => p != powerplant);
             var bestCandidate = powerplant;
             var actualCost = decimal.MaxValue;
             var actualLoad = powerToProduce;
@@ -68,13 +68,32 @@ namespace PowerplantCodingChallenge.Api.Services
 
             foreach (var pc in potentialCandidates)
             {
-                var load = Math.Max(Math.Max(pc.Pmin, powerToProduce), pc.UsedLoad);
-                var cost = pc.Type switch
+                var minimumLoad = pc.Pmin * pc.Efficiency;
+                var maximumLoad = pc.Pmax * pc.Efficiency;
+                var load = Math.Max(minimumLoad, powerToProduce);
+
+                decimal cost;
+
+                switch (pc.Type)
                 {
-                    PowerPlantType.Windturbine => 0,
-                    PowerPlantType.Gasfired => load * (requirement.Fuels.GasPricePerMWh / pc.Efficiency + Constants.CarbonTonsPerMWh * requirement.Fuels.Co2PricePerTon),
-                    _ => load * requirement.Fuels.KerosinePricePerMWh / pc.Efficiency,
-                };
+                    case PowerPlantType.Windturbine:
+                        if(maximumLoad * requirement.Fuels.WindPercentage / 100m > powerToProduce)
+                        {
+                            continue;
+                        }
+                        cost = 0;
+                        break;
+                    case PowerPlantType.Gasfired:
+                        if(minimumLoad > powerToProduce)
+                        {
+                            continue;
+                        }
+                        cost = load * (requirement.Fuels.GasPricePerMWh / pc.Efficiency + Constants.CarbonTonsPerMWh * requirement.Fuels.Co2PricePerTon);
+                        break;
+                    default:
+                        cost = load * requirement.Fuels.KerosinePricePerMWh / pc.Efficiency;
+                        break;
+                }
 
                 if (cost < actualCost)
                 {
